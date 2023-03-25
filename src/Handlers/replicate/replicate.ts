@@ -1,5 +1,4 @@
-import axios from 'axios'
-
+import axios, { AxiosResponse } from 'axios'
 
 interface IPrediction {
     id: string,
@@ -10,67 +9,82 @@ interface IImageGenerator {
     token: string,
     modelId: string,
     apiUrl: string,
-    check(): string,
-    runModel(prompt: string): Promise<any>,
-    predictionOutput(predictionId: string, secsForOutput: number): Promise<any>,
-    downloadImage(predictionId: string, fileName: string): Promise<any>
+    check(): Promise<boolean>,
+    runModel(prompt: string): Promise<AxiosResponse>,
+    predictionOutput(predictionId: string, secsForOutput: number): Promise<IPrediction>,
+}
+
+interface IImageData {
+    id: string,
+    url: string,
+}
+
+export interface IModelAccess {
+    token: string,
+    modelId: string
 }
 
 
-class ImageGenerator {
+export default class ImageGenerator implements IImageGenerator {
 
-    predictions = []
-    _token: string;
-    _modelId: string;
-    _apiUrl: string;
+    predictions: IPrediction[];
+    modelId: string;
+    apiUrl: string;
+    token: string;
 
+    constructor({ token, modelId }: IModelAccess) {
+        this.token = token;
+        this.modelId = modelId;
+        this.modelId = modelId;
+        this.predictions = [];
 
-    constructor(token: string, modelId: string) {
-        this._token = token;
-        this._modelId = modelId;
-
-        this._modelId = modelId;
-
-        this._apiUrl = 'https://api.replicate.com/v1/predictions'
+        this.apiUrl = 'https://api.replicate.com/v1/predictions'
     }
 
-    checkModel() {
-        // check model by making an api request
+    async check(): Promise<boolean> {
         return new Promise(async (resolve, reject) => {
             const headers = {
-                'Authorization': `Token ${this._token}`,
+                'Authorization': `Token ${this.token}`,
                 'Content-Type': 'application/json'
             }
-            const res = await axios.get(this._apiUrl, { headers })
+            const res = await axios.get(this.apiUrl, { headers })
             if (res.status === 200) {
                 resolve(true)
             } else {
                 reject(false)
             }
         })
+    }
+
+    downloadImage(predictionId: string, fileName: string): Promise<any> {
+        throw new Error('Method not implemented.');
+    }
+
+    checkModel() {
+        // check model by making an api request
 
     }
 
-    runModel(prompt: string) {
+    runModel(prompt: string): Promise<AxiosResponse> {
         return new Promise(async (resolve, reject) => {
             const data = {
-                'version': this._modelId,
+                'version': this.modelId,
                 'input': {
                     'prompt': prompt
                 }
-
             }
 
             const headers = {
-                'Authorization': `Token ${this._token}`,
+                'Authorization': `Token ${this.token}`,
                 'Content-Type': 'application/json'
             }
+
             try {
 
-                let res = await axios.post(this._apiUrl, data, { headers })
-                res = res.data;
-                if (res.id) {
-                    this.predictions.push(res);
+                let res = await axios.post(this.apiUrl, data, { headers })
+                let imageData: IImageData = res.data;
+                if (imageData.id) {
+                    this.predictions.push(imageData);
                 }
 
                 resolve(res);
@@ -80,38 +94,28 @@ class ImageGenerator {
         })
     }
 
-
-    async predictionOutput(predictionId, secsForOutput) {
+    async predictionOutput(predictionId: string): Promise<IPrediction> {
         return new Promise(async (resolve, reject) => {
-            /*
-            TODO:
-            - check if have a output already and await if not
-            */
-
             const headers = {
-                'Authorization': `Token ${this._token}`,
+                'Authorization': `Token ${this.token}`,
                 'Content-Type': 'application/json'
             }
 
             try {
-                let res = await axios.get(`${this._apiUrl}/${predictionId}`, { headers })
+                let res = await axios.get(`${this.apiUrl}/${predictionId}`, { headers })
                 while (!res.data.output) {
-                    res = await axios.get(`${this._apiUrl}/${predictionId}`, { headers })
+                    res = await axios.get(`${this.apiUrl}/${predictionId}`, { headers })
                 }
-                res = res.data.output;
-
-                resolve(res);
+                console.log(res.data.output)
+                const prediction = res.data.output as IPrediction;
+                console.log("======= prediction ===========")
+                console.log(prediction)
+                resolve(prediction);
             } catch (e) {
-                try {
-                    reject(e.response.data.detail)
-                } catch {
-                    reject(e.message)
-                }
+                reject(e)
             }
         })
     }
-
-
 
     // downloadImage(predictionId, fileName) {
     //     const filePath = path.join(process.cwd(), 'assets', 'images', fileName);
@@ -119,7 +123,4 @@ class ImageGenerator {
 
     //     });
     // }
-}
-module.exports = {
-    ImageGenerator
 }
